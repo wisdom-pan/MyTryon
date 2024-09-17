@@ -257,7 +257,7 @@ def app_gradio():
                     )
                     # Guidence Scale
                     guidance_scale = gr.Slider(
-                        label="CFG Strenth", minimum=0.0, maximum=7.5, step=0.5, value=2.8
+                        label="CFG Strenth", minimum=0.0, maximum=7.5, step=0.5, value=2.5
                     )
                     # Random Seed
                     seed = gr.Slider(

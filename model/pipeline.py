@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import tqdm
 from accelerate import load_checkpoint_in_model
-from diffusers import AutoencoderKL, DDIMScheduler, UNet2DConditionModel
+from diffusers import AutoencoderKL, DDIMScheduler,LCMScheduler, UNet2DConditionModel
 from diffusers.pipelines.stable_diffusion.safety_checker import \
     StableDiffusionSafetyChecker
 from diffusers.utils.torch_utils import randn_tensor
@@ -36,7 +36,8 @@ class CatVTONPipeline:
         self.weight_dtype = weight_dtype
         self.skip_safety_check = skip_safety_check
 
-        self.noise_scheduler = DDIMScheduler.from_pretrained(base_ckpt, subfolder="scheduler")
+        # self.noise_scheduler = DDIMScheduler.from_pretrained(base_ckpt, subfolder="scheduler")
+        self.noise_scheduler = LCMScheduler.from_pretrained(base_ckpt,subfolder="scheduler")
         self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device, dtype=weight_dtype)
         if not skip_safety_check:
             self.feature_extractor = CLIPImageProcessor.from_pretrained(base_ckpt, subfolder="feature_extractor")
