@@ -15,14 +15,14 @@ from tqdm import tqdm
 
 # Compute DREAM and update latents for diffusion sampling
 def compute_dream_and_update_latents_for_inpaint(
-    unet: UNet2DConditionModel,
-    noise_scheduler: SchedulerMixin,
-    timesteps: torch.Tensor,
-    noise: torch.Tensor,
-    noisy_latents: torch.Tensor,
-    target: torch.Tensor,
-    encoder_hidden_states: torch.Tensor,
-    dream_detail_preservation: float = 1.0,
+        unet: UNet2DConditionModel,
+        noise_scheduler: SchedulerMixin,
+        timesteps: torch.Tensor,
+        noise: torch.Tensor,
+        noisy_latents: torch.Tensor,
+        target: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        dream_detail_preservation: float = 1.0,
 ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
     """
     Implements "DREAM (Diffusion Rectification and Estimation-Adaptive Models)" from http://arxiv.org/abs/2312.00210.
@@ -47,7 +47,7 @@ def compute_dream_and_update_latents_for_inpaint(
     sqrt_one_minus_alphas_cumprod = (1.0 - alphas_cumprod) ** 0.5
 
     # The paper uses lambda = sqrt(1 - alpha) ** p, with p = 1 in their experiments.
-    dream_lambda = sqrt_one_minus_alphas_cumprod**dream_detail_preservation
+    dream_lambda = sqrt_one_minus_alphas_cumprod ** dream_detail_preservation
 
     pred = None  # b, 4, h, w
     with torch.no_grad():
@@ -65,27 +65,28 @@ def compute_dream_and_update_latents_for_inpaint(
         raise NotImplementedError("DREAM has not been implemented for v-prediction")
     else:
         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-    
+
     _noisy_latents = torch.cat([_noisy_latents, noisy_latents[:, 4:]], dim=1)
     return _noisy_latents, _target
 
+
 # Prepare the input for inpainting model.
 def prepare_inpainting_input(
-    noisy_latents: torch.Tensor, 
-    mask_latents: torch.Tensor,
-    condition_latents: torch.Tensor,
-    enable_condition_noise: bool = True,
-    condition_concat_dim: int = -1,
+        noisy_latents: torch.Tensor,
+        mask_latents: torch.Tensor,
+        condition_latents: torch.Tensor,
+        enable_condition_noise: bool = True,
+        condition_concat_dim: int = -1,
 ) -> torch.Tensor:
     """
     Prepare the input for inpainting model.
-    
+
     Args:
         noisy_latents (torch.Tensor): Noisy latents.
         mask_latents (torch.Tensor): Mask latents.
         condition_latents (torch.Tensor): Condition latents.
         enable_condition_noise (bool): Enable condition noise.
-    
+
     Returns:
         torch.Tensor: Inpainting input.
     """
@@ -94,6 +95,7 @@ def prepare_inpainting_input(
         noisy_latents = torch.cat([noisy_latents, condition_latents_], dim=condition_concat_dim)
     noisy_latents = torch.cat([noisy_latents, mask_latents, condition_latents], dim=1)
     return noisy_latents
+
 
 # Compute VAE encodings
 def compute_vae_encodings(image: torch.Tensor, vae: torch.nn.Module) -> torch.Tensor:
@@ -117,6 +119,7 @@ def compute_vae_encodings(image: torch.Tensor, vae: torch.nn.Module) -> torch.Te
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import ProjectConfiguration
 
+
 def init_accelerator(config):
     accelerator_project_config = ProjectConfiguration(
         project_dir=config.project_name,
@@ -133,7 +136,7 @@ def init_accelerator(config):
     # Disable AMP for MPS.
     if torch.backends.mps.is_available():
         accelerator.native_amp = False
-        
+
     if accelerator.is_main_process:
         accelerator.init_trackers(
             project_name=config.project_name,
@@ -143,7 +146,7 @@ def init_accelerator(config):
                 "image_size": f"{config.width}x{config.height}",
             },
         )
-        
+
     return accelerator
 
 
@@ -185,7 +188,7 @@ def prepare_eval_data(dataset_root, dataset_name, is_pair=True):
             cloth_image_paths = []
             person_image_paths = []
             with open(
-                os.path.join(dataset_root, "VITONHD-1024", "test_pairs.txt"), "r"
+                    os.path.join(dataset_root, "VITONHD-1024", "test_pairs.txt"), "r"
             ) as f:
                 lines = f.readlines()
                 for line in lines:
@@ -230,7 +233,7 @@ def prepare_eval_data(dataset_root, dataset_name, is_pair=True):
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Shorts/Leather & Faux Leather Shorts/20143338/20143338-1.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Jackets/Blazers/15541224/15541224-2.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/men/Polo Shirts/Polo Shirts/17652415/17652415-0.jpg"
-            
+
             # "Images/men/Jackets/Hooded Jackets/12550261/12550261-1.jpg",
             # "Images/men/Shirts/Shirts/15614589/15614589-4.jpg",
             # "Images/women/Dresses/Day Dresses/10372515/10372515-3.jpg",
@@ -248,7 +251,7 @@ def prepare_eval_data(dataset_root, dataset_name, is_pair=True):
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Shorts/Leather & Faux Leather Shorts/20143338/20143338-2.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Jackets/Blazers/15541224/15541224-0.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/men/Polo Shirts/Polo Shirts/17652415/17652415-4.jpg",
-            
+
             # "Images/men/Jackets/Hooded Jackets/12550261/12550261-3.jpg",
             # "Images/men/Shirts/Shirts/15614589/15614589-3.jpg",
             # "Images/women/Dresses/Day Dresses/10372515/10372515-0.jpg",
@@ -367,7 +370,7 @@ def tensor_to_image(tensor: torch.Tensor):
     assert tensor.dim() == 3, "Input tensor should be 3-dimensional."
     assert tensor.dtype == torch.float32, "Input tensor should be float32."
     assert (
-        tensor.min() >= 0 and tensor.max() <= 1
+            tensor.min() >= 0 and tensor.max() <= 1
     ), "Input tensor should be in range [0, 1]."
     tensor = tensor.cpu()
     tensor = tensor * 255
@@ -455,7 +458,6 @@ def is_xformers_available():
         )
 
 
-
 def resize_and_crop(image, size):
     # Crop to size ratio
     w, h = image.size
@@ -471,6 +473,43 @@ def resize_and_crop(image, size):
     )
     # resize
     image = image.resize(size, Image.LANCZOS)
+    return image
+
+
+def resize_image(image, size):
+    """
+    Resize and crop an image to fit the specified size.
+
+    Parameters:
+    image (PIL.Image): The image to resize and crop.
+    size (tuple): The target size as (width, height).
+
+    Returns:
+    PIL.Image: The resized and cropped image.
+    """
+
+    target_width, target_height = size
+    image_ratio = image.width / image.height
+    target_ratio = target_width / target_height
+
+    if image_ratio > target_ratio:
+        # Image is too wide, resize by height
+        new_height = target_height
+        new_width = int(target_height * image_ratio)
+    else:
+        # Image is too tall, resize by width
+        new_width = target_width
+        new_height = int(target_width / image_ratio)
+
+    image = image.resize((new_width, new_height), Image.ANTIALIAS)
+
+    # Now crop the image to the target size
+    left = (new_width - target_width) / 2
+    top = (new_height - target_height) / 2
+    right = (new_width + target_width) / 2
+    bottom = (new_height + target_height) / 2
+
+    image = image.crop((left, top, right, bottom))
     return image
 
 
@@ -503,6 +542,7 @@ def scan_files_in_dir(directory, postfix: Set[str] = None, progress_bar: tqdm = 
         elif entry.is_dir():
             file_list += scan_files_in_dir(entry.path, postfix=postfix, progress_bar=progress_bar)
     return file_list
+
 
 if __name__ == "__main__":
     ...
