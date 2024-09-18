@@ -98,6 +98,12 @@ def image_grid(imgs, rows, cols):
     for i, img in enumerate(imgs):
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
+def clear_cache():
+    global cached_mask,cached_person_image_path
+    cached_mask = None
+    cached_person_image_path = None
+    return "清除缓存成功"
+    
 #定义缓存mask
 cached_mask = None
 cached_person_image_path = None
@@ -157,6 +163,7 @@ def submit_function(
     
     # Process mask
     if mask is not None:
+        print("******mask****",mask)
         mask = resize_and_crop(mask, (args.width, args.height))
     elif cached_mask is not None and cached_person_image_path == person_image_path:
         mask = cached_mask
@@ -208,10 +215,12 @@ def submit_function(
 def person_example_fn(image_path):
     return image_path
 
+# HEADER = """
+# <h1 style="text-align: center;"> 🐈 CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models </h1>
+# """
 HEADER = """
-<h1 style="text-align: center;"> 🐈 CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models </h1>
+<h1 style="text-align: center;"> 🐈 一键试装：模特换装、参考模特迁移换装
 """
-
 def app_gradio():
     with gr.Blocks(title="CatVTON") as demo:
         gr.Markdown(HEADER)
@@ -234,14 +243,19 @@ def app_gradio():
                         )
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">Two ways to provide Mask:<br>1. Upload the person image and use the `🖌️` above to draw the Mask (higher priority)<br>2. Select the `Try-On Cloth Type` to generate automatically </span>'
+                            '<span style="color: #808080; font-size: small;">提供 Mask 的两种方式：<br>1. 上传人物图像并使用上面的🖌️绘制 Mask（优先级较高）<br>2. 选择“试穿衣服类型”自动生成 </span>'
                         )
                         cloth_type = gr.Radio(
                             label="Try-On Cloth Type",
                             choices=["upper", "lower", "overall"],
                             value="upper",
                         )
-
+                clear_cache_button = gr.Button("清除缓存")
+                gr.Markdown(
+                            '<span style="color: #808080; font-size: small;">清除缓存，重置mask</span>'
+                )
+                output = gr.Textbox(label="缓存状态")
+                clear_cache_button.click(clear_cache,outputs=output)        
 
                 submit = gr.Button("Submit")
                 gr.Markdown(
@@ -249,11 +263,11 @@ def app_gradio():
                 )
                 
                 gr.Markdown(
-                    '<span style="color: #808080; font-size: small;">Advanced options can adjust details:<br>1. `Inference Step` may enhance details;<br>2. `CFG` is highly correlated with saturation;<br>3. `Random seed` may improve pseudo-shadow.</span>'
+                    '<span style="color: #808080; font-size: small;">高级选项可以调整细节:<br>1. `Inference Step` 增加更多细节，推理时间也会增加;<br>2. `CFG` 与服装的相关度有关;<br>3. `Random seed` 可能会改善伪阴影，随机种子.</span>'
                 )
                 with gr.Accordion("Advanced Options", open=False):
                     num_inference_steps = gr.Slider(
-                        label="Inference Step", minimum=10, maximum=100, step=5, value=20
+                        label="Inference Step", minimum=10, maximum=100, step=5, value=10
                     )
                     # Guidence Scale
                     guidance_scale = gr.Slider(
@@ -282,7 +296,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Person Examples ①",
+                            label="服装模特样例 ①",
                         )
                         women_exm = gr.Examples(
                             examples=[
@@ -291,11 +305,11 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Person Examples ②",
+                            label="服装模特样例 ②",
                         )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Person examples come from the demos of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a>. </span>'
-                        )
+                        # gr.Markdown(
+                        #     '<span style="color: #808080; font-size: small;">*Person examples come from the demos of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a>. </span>'
+                        # )
                     with gr.Column():
                         condition_upper_exm = gr.Examples(
                             examples=[
@@ -304,7 +318,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Upper Examples",
+                            label="服装上半身示例",
                         )
                         condition_overall_exm = gr.Examples(
                             examples=[
@@ -313,7 +327,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Overall Examples",
+                            label="服装全身示例",
                         )
                         condition_person_exm = gr.Examples(
                             examples=[
@@ -322,11 +336,11 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Reference Person Examples",
+                            label="参考服装模型示例",
                         )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Condition examples come from the Internet. </span>'
-                        )
+                        # gr.Markdown(
+                        #     '<span style="color: #808080; font-size: small;">*Condition examples come from the Internet. </span>'
+                        # )
 
             image_path.change(
                 person_example_fn, inputs=image_path, outputs=person_image
