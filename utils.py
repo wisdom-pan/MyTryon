@@ -47,7 +47,7 @@ def compute_dream_and_update_latents_for_inpaint(
     sqrt_one_minus_alphas_cumprod = (1.0 - alphas_cumprod) ** 0.5
 
     # The paper uses lambda = sqrt(1 - alpha) ** p, with p = 1 in their experiments.
-    dream_lambda = sqrt_one_minus_alphas_cumprod ** dream_detail_preservation
+    dream_lambda = sqrt_one_minus_alphas_cumprod**dream_detail_preservation
 
     pred = None  # b, 4, h, w
     with torch.no_grad():
@@ -136,7 +136,6 @@ def init_accelerator(config):
     # Disable AMP for MPS.
     if torch.backends.mps.is_available():
         accelerator.native_amp = False
-
     if accelerator.is_main_process:
         accelerator.init_trackers(
             project_name=config.project_name,
@@ -146,7 +145,6 @@ def init_accelerator(config):
                 "image_size": f"{config.width}x{config.height}",
             },
         )
-
     return accelerator
 
 
@@ -251,7 +249,6 @@ def prepare_eval_data(dataset_root, dataset_name, is_pair=True):
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Shorts/Leather & Faux Leather Shorts/20143338/20143338-2.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/women/Jackets/Blazers/15541224/15541224-0.jpg",
             "/home/chongzheng/Projects/hivton/Datasets/FARFETCH-1024/Images/men/Polo Shirts/Polo Shirts/17652415/17652415-4.jpg",
-
             # "Images/men/Jackets/Hooded Jackets/12550261/12550261-3.jpg",
             # "Images/men/Shirts/Shirts/15614589/15614589-3.jpg",
             # "Images/women/Dresses/Day Dresses/10372515/10372515-0.jpg",
@@ -476,6 +473,22 @@ def resize_and_crop(image, size):
     return image
 
 
+
+def resize_and_padding(image, size):
+    # Padding to size ratio
+    w, h = image.size
+    target_w, target_h = size
+    if w / h < target_w / target_h:
+        new_h = target_h
+        new_w = w * target_h // h
+    else:
+        new_w = target_w
+        new_h = h * target_w // w
+    image = image.resize((new_w, new_h), Image.LANCZOS)
+    # padding
+    padding = Image.new("RGB", size, (255, 255, 255))
+    padding.paste(image, ((target_w - new_w) // 2, (target_h - new_h) // 2))
+    return padding
 def resize_image(image, size):
     """
     Resize and crop an image to fit the specified size.
@@ -501,7 +514,8 @@ def resize_image(image, size):
         new_width = target_width
         new_height = int(target_width / image_ratio)
 
-    image = image.resize((new_width, new_height), Image.ANTIALIAS)
+
+    image = image.resize((new_width, new_height), Image.LANCZOS)
 
     # Now crop the image to the target size
     left = (new_width - target_width) / 2
@@ -511,6 +525,7 @@ def resize_image(image, size):
 
     image = image.crop((left, top, right, bottom))
     return image
+
 
 
 def resize_and_padding(image, size):
@@ -546,3 +561,4 @@ def scan_files_in_dir(directory, postfix: Set[str] = None, progress_bar: tqdm = 
 
 if __name__ == "__main__":
     ...
+

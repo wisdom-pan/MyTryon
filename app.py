@@ -99,6 +99,15 @@ def image_grid(imgs, rows, cols):
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
 
+def clear_cache():
+    global cached_mask,cached_person_image_path
+    cached_mask = None
+    cached_person_image_path = None
+    return "清除缓存成功"
+    
+#定义缓存mask
+cached_mask = None
+cached_person_image_path = None
 
 args = parse_args()
 repo_path = snapshot_download(repo_id=args.resume_path)
@@ -128,7 +137,9 @@ def submit_function(
     seed,
     show_type
 ):
-    person_image, mask = person_image["background"], person_image["layers"][0]
+
+    global cached_mask, cached_person_image_path
+    person_image_path, mask = person_image["background"], person_image["layers"][0]
     mask = Image.open(mask).convert("L")
     if len(np.unique(np.array(mask))) == 1:
         mask = None
@@ -147,7 +158,8 @@ def submit_function(
     if seed != -1:
         generator = torch.Generator(device='cuda').manual_seed(seed)
 
-    person_image = Image.open(person_image).convert("RGB")
+
+    person_image = Image.open(person_image_path).convert("RGB")
     cloth_image = Image.open(cloth_image).convert("RGB")
     person_image = resize_and_crop(person_image, (args.width, args.height))
     cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
@@ -155,11 +167,15 @@ def submit_function(
     # Process mask
     if mask is not None:
         mask = resize_and_crop(mask, (args.width, args.height))
+    elif cached_mask is not None and cached_person_image_path == person_image_path:
+        mask = cached_mask
     else:
         mask = automasker(
             person_image,
             cloth_type
         )['mask']
+        cached_mask = mask
+        cached_person_image_path = person_image_path
     mask = mask_processor.blur(mask, blur_factor=9)
 
     # Inference
@@ -201,38 +217,13 @@ def submit_function(
 def person_example_fn(image_path):
     return image_path
 
-HEADER = """
-<h1 style="text-align: center;"> 🐈 CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models </h1>
-<div style="display: flex; justify-content: center; align-items: center;">
-  <a href="http://arxiv.org/abs/2407.15886" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/arXiv-2407.15886-red?style=flat&logo=arXiv&logoColor=red' alt='arxiv'>
-  </a>
-  <a href='https://huggingface.co/zhengchong/CatVTON' style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Hugging Face-ckpts-orange?style=flat&logo=HuggingFace&logoColor=orange' alt='huggingface'>
-  </a>
-  <a href="https://github.com/Zheng-Chong/CatVTON" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/GitHub-Repo-blue?style=flat&logo=GitHub' alt='GitHub'>
-  </a>
-  <a href="http://120.76.142.206:8888" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Demo-Gradio-gold?style=flat&logo=Gradio&logoColor=red' alt='Demo'>
-  </a>
-  <a href="https://huggingface.co/spaces/zhengchong/CatVTON" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Space-ZeroGPU-orange?style=flat&logo=Gradio&logoColor=red' alt='Demo'>
-  </a>
-  <a href='https://zheng-chong.github.io/CatVTON/' style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Webpage-Project-silver?style=flat&logo=&logoColor=orange' alt='webpage'>
-  </a>
-  <a href="https://github.com/Zheng-Chong/CatVTON/LICENCE" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/License-CC BY--NC--SA--4.0-lightgreen?style=flat&logo=Lisence' alt='License'>
-  </a>
-</div>
-<br>
-· This demo and our weights are only for <span>Non-commercial Use</span>. <br>
-· You can try CatVTON in our <a href="https://huggingface.co/spaces/zhengchong/CatVTON">HuggingFace Space</a> or our <a href="http://120.76.142.206:8888">online demo</a> (run on 3090). <br>
-· Thanks to <a href="https://huggingface.co/zero-gpu-explorers">ZeroGPU</a> for providing A100 for our <a href="https://huggingface.co/spaces/zhengchong/CatVTON">HuggingFace Space</a>. <br>
-· SafetyChecker is set to filter NSFW content, but it may block normal results too. Please adjust the <span>`seed`</span> for normal outcomes.<br> 
-"""
 
+# HEADER = """
+# <h1 style="text-align: center;"> 🐈 CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models </h1>
+# """
+HEADER = """
+<h1 style="text-align: center;"> 🐈 一键试装：模特换装、参考模特迁移换装
+"""
 def app_gradio():
     with gr.Blocks(title="CatVTON") as demo:
         gr.Markdown(HEADER)
@@ -255,7 +246,7 @@ def app_gradio():
                         )
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">Two ways to provide Mask:<br>1. Upload the person image and use the `🖌️` above to draw the Mask (higher priority)<br>2. Select the `Try-On Cloth Type` to generate automatically </span>'
+                            '<span style="color: #808080; font-size: small;">提供 Mask 的两种方式：<br>1. 上传人物图像并使用上面的🖌️绘制 Mask（优先级较高）<br>2. 选择“试穿衣服类型”自动生成 </span>'
                         )
                         cloth_type = gr.Radio(
                             label="Try-On Cloth Type",
@@ -264,17 +255,24 @@ def app_gradio():
                         )
 
 
+                clear_cache_button = gr.Button("清除缓存")
+                gr.Markdown(
+                            '<span style="color: #808080; font-size: small;">清除缓存，重置mask</span>'
+                )
+                output = gr.Textbox(label="缓存状态")
+                clear_cache_button.click(clear_cache,outputs=output)        
+
                 submit = gr.Button("Submit")
                 gr.Markdown(
                     '<center><span style="color: #FF0000">!!! Click only Once, Wait for Delay !!!</span></center>'
                 )
                 
                 gr.Markdown(
-                    '<span style="color: #808080; font-size: small;">Advanced options can adjust details:<br>1. `Inference Step` may enhance details;<br>2. `CFG` is highly correlated with saturation;<br>3. `Random seed` may improve pseudo-shadow.</span>'
+                    '<span style="color: #808080; font-size: small;">高级选项可以调整细节:<br>1. `Inference Step` 增加更多细节，推理时间也会增加;<br>2. `CFG` 与服装的相关度有关;<br>3. `Random seed` 可能会改善伪阴影，随机种子.</span>'
                 )
                 with gr.Accordion("Advanced Options", open=False):
                     num_inference_steps = gr.Slider(
-                        label="Inference Step", minimum=10, maximum=100, step=5, value=50
+                        label="Inference Step", minimum=10, maximum=100, step=5, value=10
                     )
                     # Guidence Scale
                     guidance_scale = gr.Slider(
@@ -287,7 +285,7 @@ def app_gradio():
                     show_type = gr.Radio(
                         label="Show Type",
                         choices=["result only", "input & result", "input & mask & result"],
-                        value="input & mask & result",
+                        value="result only",
                     )
 
             with gr.Column(scale=2, min_width=500):
@@ -303,7 +301,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Person Examples ①",
+                            label="服装模特样例 ①",
                         )
                         women_exm = gr.Examples(
                             examples=[
@@ -312,11 +310,11 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Person Examples ②",
+                            label="服装模特样例 ②",
                         )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Person examples come from the demos of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a>. </span>'
-                        )
+                        # gr.Markdown(
+                        #     '<span style="color: #808080; font-size: small;">*Person examples come from the demos of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a>. </span>'
+                        # )
                     with gr.Column():
                         condition_upper_exm = gr.Examples(
                             examples=[
@@ -325,7 +323,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Upper Examples",
+                            label="服装上半身示例",
                         )
                         condition_overall_exm = gr.Examples(
                             examples=[
@@ -334,7 +332,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Overall Examples",
+                            label="服装全身示例",
                         )
                         condition_person_exm = gr.Examples(
                             examples=[
@@ -343,12 +341,11 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Condition Reference Person Examples",
+                            label="参考服装模型示例",
                         )
-                        gr.Markdown(
-                            '<span style="color: #808080; font-size: small;">*Condition examples come from the Internet. </span>'
-                        )
-
+                        # gr.Markdown(
+                        #     '<span style="color: #808080; font-size: small;">*Condition examples come from the Internet. </span>'
+                        # )
             image_path.change(
                 person_example_fn, inputs=image_path, outputs=person_image
             )
